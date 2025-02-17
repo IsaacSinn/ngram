@@ -7,6 +7,8 @@ import numpy as np
 import os
 import sys
 from tqdm import tqdm  # new import for progress bar
+import pickle  # new import for saving model
+from models.ngram.ngram_vanilla import Ngram as Ngram_vanilla  # new import for Ngram_vanilla
 
 # make sure the directory that contains this file is in sys.path
 _cd_: str = os.path.abspath(os.path.dirname(__file__))
@@ -19,9 +21,14 @@ from data.charloader import load_chars_from_file
 from models.ngram.ngram import Ngram
 from vocab import START_TOKEN, END_TOKEN
 
-def train_ngram() -> Ngram:
+def train_ngram(n: int) -> Ngram:
     train_data: Sequence[Sequence[str]] = load_chars_from_file("./data/large")
-    return Ngram(5, train_data)
+    return Ngram(n, train_data)
+
+# New function to train a vanilla n-gram model.
+def train_ngram_vanilla(n: int) -> Ngram_vanilla:
+    train_data: Sequence[Sequence[str]] = load_chars_from_file("./data/large")
+    return Ngram_vanilla(n, train_data)
 
 def dev_ngram(m: Ngram) -> Tuple[int, int]:
     dev_data: Sequence[Sequence[str]] = load_chars_from_file("./data/dev")
@@ -55,12 +62,38 @@ def test_ngram(m: Ngram) -> Tuple[int, int]:
             total += 1
     return num_correct, total
 
-def main() -> None:
-    m: Ngram = train_ngram()
+def train_and_save() -> None:
+    m: Ngram = train_ngram(5)
+    print("Training complete: ", len(m.context_counts))
+    
+    # Save the trained model
+    with open("ngram_model.pkl", "wb") as f:  # model saved in current directory
+        pickle.dump(m, f)
+    print("Model saved as ngram_model.pkl")
+    
+    num_correct, total = dev_ngram(m)
+    print("Dev accuracy:", num_correct / total)
 
-    num_correct, total = test_ngram(m)
+# New function to train and save the vanilla model.
+def train_and_save_vanilla() -> None:
+    m_v = train_ngram_vanilla(5)
+    print("Vanilla training complete: ", len(m_v.context_counts))
+    
+    with open("ngram_vanilla_model.pkl", "wb") as f:
+        pickle.dump(m_v, f)
+    print("Ngram_vanilla model saved as ngram_vanilla_model.pkl")
 
-    print(num_correct / total)
+def open_and_test() -> None:
+    with open("ngram_model.pkl", "rb") as f:
+        m: Ngram = pickle.load(f)
+    print("Model loaded from ngram_model.pkl")
+    
+    num_correct, total = dev_ngram(m)
+    print("Test accuracy:", num_correct / total)
 
 if __name__ == "__main__":
-    main()
+    # Choose one or both training routines:
+    train_and_save()
+    train_and_save_vanilla()
+    # Optionally, run testing:
+    # open_and_test()

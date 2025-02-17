@@ -80,7 +80,8 @@ class Ngram(LM):
         """Return the language model's start state. (A unigram model doesn't
         have a state, so it's just `None`."""
         
-        return tuple(self.vocab.numberize(START_TOKEN) for _ in range(self.n - 1))
+        state: StateType = np.array([self.vocab.numberize(START_TOKEN)] * (self.n - 1))
+        return state
 
     def step(self: NgramType, q: StateType, w_idx: int) -> Tuple[StateType, Mapping[str, float]]:
         """Compute one step of the language model.
@@ -93,16 +94,30 @@ class Ngram(LM):
         - r: The state of the model after reading 'w_idk'
         - pb: The log-probability distribution over the next token (after reading 'w_idx')
         """
-        
-        if self.n == 1:
-            return ()
-        else:
-            new_context = (*q[1:], w_idx)
 
-        if new_context not in self.logprob:
-            return new_context, np.full(len(self.vocab), -np.inf)
+
+        q = np.append(q[1:], w_idx)
+        context = tuple(q)
+
+        logprobs = np.full(len(self.vocab), -np.inf)
+
+        # check if logprob for this context is empty
+        if context not in self.logprob:
+            uniform_logprob = np.log(1.0 / (len(self.vocab) - 1))
+            logprobs.fill(uniform_logprob)
         else:
-            return new_context, self.logprob[new_context]
+            for word_idx, lp in enumerate(self.logprob.get(context, [])):
+                logprobs[word_idx] = lp
+
+        start_token_idx = self.vocab.numberize(START_TOKEN)
+        logprobs[start_token_idx] = -np.inf
+
+        # Normalize the log probabilities
+        max_logprob = np.max(logprobs)
+        logprobs -= max_logprob
+        logprobs -= np.log(np.sum(np.exp(logprobs)))
+
+        return (q, logprobs)
 
                 
                 

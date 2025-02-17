@@ -23,7 +23,7 @@ def main() -> None:
     train_data: Sequence[Sequence[str]] = [["the", "cat", "sat", "on", "the", "mat"]]
     dev_data: Sequence[Sequence[str]] = [["the", "cat", "sat", "on", "the", "mat"]]
 
-    m: Ngram = Ngram(2, train_data)
+    m: Ngram = Ngram(3, train_data)
     pprint(m.logprob)
 
     num_correct: int = 0
