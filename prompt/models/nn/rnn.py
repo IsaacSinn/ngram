@@ -17,14 +17,13 @@ del _cd_
 # PYTHON PROJECT IMPORTS
 from lm import LM, StateType
 from vocab import Vocab, START_TOKEN, END_TOKEN
+from data.charloader import load_chars_from_file
 
 RNNType: Type = Type["RNN"]
+LSTMType: Type = Type["LSTM"]
 
 class RNN(pt.nn.Module):
     """
-    In this file you should implement a generic RNN language
-    model with the class RNN. Your class should follow the same api as models/nn/unigram.Unigram.
-    Your model should contain an instance of the RNNCell class in Pytorch.
     """
     def __init__(self: RNNType, data: Sequence[Sequence[str]], saved_model_path: str = None, num_epochs: int = 2) -> None:
         super().__init__()
@@ -44,7 +43,6 @@ class RNN(pt.nn.Module):
         self.optimizer = pt.optim.Adam(self.parameters(), lr=1e-3)
     
         if saved_model_path is None:
-            o = pt.optim.SGD(self.rnn.parameters(), lr=1e-3)
 
             for epoch in range(num_epochs):
 
@@ -62,7 +60,6 @@ class RNN(pt.nn.Module):
                         train_chars += 1
                         q, p = self.step(q, self.vocab.numberize(c_in))
                         
-                        # ground truth is a vector of length |vocab| with a 1 at the index of the correct character
                         ground_truth = pt.tensor([self.vocab.numberize(c_out)])
 
                         loss += self.error(p, ground_truth)
@@ -71,12 +68,12 @@ class RNN(pt.nn.Module):
 
                     self.optimizer.step()
 
-                    # gradient clip
                     pt.nn.utils.clip_grad_norm_(self.parameters(), 1.0)
 
                 # save model parameters
                 pt.save(self.state_dict(), f"./rnn_{epoch}.model")
         else:
+            print(f"loading model from {saved_model_path}")
             self.load_state_dict(pt.load(saved_model_path, weights_only=True))
 
     
@@ -99,3 +96,79 @@ class RNN(pt.nn.Module):
         logits, state = self.forward(x, state)
         # Removed softmax so that logits (raw scores) are returned for training loss.
         return state, pt.log_softmax(logits, dim=1)
+    
+
+class LSTM(pt.nn.Module):
+    """
+    """
+    def __init__(self: LSTMType, data: Sequence[Sequence[str]], saved_model_path: str = None, num_epochs: int = 15) -> None:
+        super().__init__()
+
+        # self.device = pt.device("cuda" if pt.cuda.is_available() else "cpu")
+        self.device = pt.device("cpu")
+
+        print(f"device: {self.device}")
+        
+        self.vocab = Vocab()
+        for line in data: 
+            for w in list(line) + [END_TOKEN]:
+                self.vocab.add(w)
+
+        # |vocab| -> 64 -> |vocab| 
+        self.lstm = pt.nn.LSTMCell(len(self.vocab), 64)
+        self.fc = pt.nn.Linear(64, len(self.vocab))
+
+        self.error = pt.nn.CrossEntropyLoss()
+        self.optimizer = pt.optim.Adam(self.parameters(), lr=1e-3)
+        
+        self.to(self.device)
+    
+        if saved_model_path is None:
+            for epoch in range(num_epochs):
+                random.shuffle(data)
+                train_chars = 0
+                for line in tqdm(data, desc=f"epoch {epoch}"):
+                    self.optimizer.zero_grad()
+                    loss = 0.
+                    q = self.start()
+                    for c_input, c_actual in zip([START_TOKEN] + line, line + [END_TOKEN]):
+                        q, p = self.step(q, self.vocab.numberize(c_input))
+                        loss += self.error(p, pt.tensor([self.vocab.numberize(c_actual)], device=self.device))
+                    loss.backward()
+                    self.optimizer.step()
+                    train_chars += len(line)
+                print(f"epoch {epoch} loss: {loss.item() / train_chars}")
+                # save model parameters
+                pt.save(self.state_dict(), f"./lstm_{epoch}.model")
+                # test on dev set
+                dev_data: Sequence[Sequence[str]] = load_chars_from_file("./data/dev")
+                num_correct: int = 0
+                total: int = 0
+                for dev_line in dev_data:
+                    q = self.start()
+                    for c_input, c_actual in zip([START_TOKEN] + dev_line, dev_line + [END_TOKEN]):
+                        q, p = self.step(q, self.vocab.numberize(c_input))
+                        c_predicted = self.vocab.denumberize(p.argmax())
+                        num_correct += int(c_predicted == c_actual)
+                        total += 1
+                print(f"epoch {epoch} dev accuracy: {num_correct / total}")
+        else:
+            print(f"loading model from {saved_model_path}")
+            self.load_state_dict(pt.load(saved_model_path, weights_only=True))
+        
+
+    def start(self: LSTMType) -> StateType:
+        # Create initial states on the correct device
+        return pt.zeros(1, 64, device=self.device), pt.zeros(1, 64, device=self.device)
+
+    def forward(self: LSTMType, q: StateType, c: int) -> Tuple[StateType, pt.Tensor]:
+        # Create one_hot tensor on the proper device
+        one_hot = pt.zeros(1, len(self.vocab), device=self.device)
+        one_hot[0, c] = 1.
+        new_hidden, new_cell = self.lstm(one_hot, q)
+        logits = self.fc(new_hidden)
+        return (new_hidden, new_cell), logits
+
+    def step(self: LSTMType, q: StateType, c: int) -> Tuple[StateType, pt.Tensor]:
+        new_states, logits = self.forward(q, c)
+        return new_states, pt.log_softmax(logits, dim=1)

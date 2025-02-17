@@ -56,7 +56,7 @@ class Ngram(LM):
         if self.debug:
             print("vocab size", vocab_size)
 
-        # Precompute probabilities for each observed context.
+        # compute logprob
         for context in tqdm(list(self.context_counts.keys()), desc="computing logprob"):
         # for context in self.context_counts.keys():
             for w_idx in range(vocab_size):
@@ -102,12 +102,11 @@ class Ngram(LM):
         total = self.total_counts[context]
         n1plus = sum(1 for count in counts.values() if count > 0)
 
-        # Probability mass assigned to the observed count for w_idx.
         prob_observed = max(0, counts[w_idx] - self.discount) / total if total > 0 else 0
         if self.debug:
             print("prob observed for ", self.vocab.denumberize(w_idx), "is", prob_observed)
 
-        # Backoff weight: redistributed probability mass.
+        # Backoff weight: redistributed probability mass
         backoff_weight = (self.discount + n1plus / total) if total > 0 else 0
         if self.debug:
             print("baxkoff weight for ", self.vocab.denumberize(w_idx), "is", backoff_weight)

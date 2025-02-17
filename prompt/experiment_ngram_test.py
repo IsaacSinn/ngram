@@ -92,8 +92,8 @@ def open_and_test() -> None:
     print("Test accuracy:", num_correct / total)
 
 if __name__ == "__main__":
-    # Choose one or both training routines:
+
     train_and_save()
     train_and_save_vanilla()
-    # Optionally, run testing:
+
     # open_and_test()

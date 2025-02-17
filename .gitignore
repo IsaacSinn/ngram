@@ -1,2 +1,5 @@
 # all pkl files
 *.pkl
+*.model
+# pychache
+__pycache__/
