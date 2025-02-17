@@ -29,7 +29,7 @@ def train_rnn() -> RNN:
     if os.path.exists("./rnn_1.model"):
         saved_model_path = "./rnn_1.model"
 
-    return RNN(train_data, saved_model_path=saved_model_path, num_epochs=2)
+    return RNN(train_data, saved_model_path=saved_model_path, num_epochs=15)
 
 def dev_rnn(m: RNN) -> Tuple[int, int]:
     dev_data: Sequence[Sequence[str]] = load_chars_from_file("./data/dev")
@@ -55,7 +55,7 @@ def train_lstm() -> LSTM:
     if os.path.exists("./lstm_1.model"):
         saved_model_path = "./lstm_1.model"
 
-    return LSTM(train_data, saved_model_path=saved_model_path, num_epochs=2)
+    return LSTM(train_data, saved_model_path=saved_model_path, num_epochs=100)
 
 def dev_lstm(m: LSTM) -> Tuple[int, int]:
     dev_data: Sequence[Sequence[str]] = load_chars_from_file("./data/dev")

@@ -25,7 +25,7 @@ LSTMType: Type = Type["LSTM"]
 class RNN(pt.nn.Module):
     """
     """
-    def __init__(self: RNNType, data: Sequence[Sequence[str]], saved_model_path: str = None, num_epochs: int = 2) -> None:
+    def __init__(self: RNNType, data: Sequence[Sequence[str]], saved_model_path: str = None, num_epochs: int = 1) -> None:
         super().__init__()
 
         self.vocab = Vocab()
@@ -43,7 +43,6 @@ class RNN(pt.nn.Module):
         self.optimizer = pt.optim.Adam(self.parameters(), lr=1e-3)
     
         if saved_model_path is None:
-
             for epoch in range(num_epochs):
 
                 random.shuffle(data)
@@ -56,7 +55,7 @@ class RNN(pt.nn.Module):
 
                     q = self.start()
 
-                    for c_in, c_out in zip([START_TOKEN] + line, line + [END_TOKEN]): # skip BOS
+                    for c_in, c_out in zip([START_TOKEN] + line, line + [END_TOKEN]):
                         train_chars += 1
                         q, p = self.step(q, self.vocab.numberize(c_in))
                         
@@ -70,7 +69,6 @@ class RNN(pt.nn.Module):
 
                     pt.nn.utils.clip_grad_norm_(self.parameters(), 1.0)
 
-                # save model parameters
                 pt.save(self.state_dict(), f"./rnn_{epoch}.model")
         else:
             print(f"loading model from {saved_model_path}")
@@ -94,7 +92,6 @@ class RNN(pt.nn.Module):
 
     def step(self: RNNType, state: StateType, x: int) -> Tuple[StateType, Mapping[str, float]]:
         logits, state = self.forward(x, state)
-        # Removed softmax so that logits (raw scores) are returned for training loss.
         return state, pt.log_softmax(logits, dim=1)
     
 
@@ -123,46 +120,48 @@ class LSTM(pt.nn.Module):
         
         self.to(self.device)
     
-        if saved_model_path is None:
-            for epoch in range(num_epochs):
-                random.shuffle(data)
-                train_chars = 0
-                for line in tqdm(data, desc=f"epoch {epoch}"):
-                    self.optimizer.zero_grad()
-                    loss = 0.
-                    q = self.start()
-                    for c_input, c_actual in zip([START_TOKEN] + line, line + [END_TOKEN]):
-                        q, p = self.step(q, self.vocab.numberize(c_input))
-                        loss += self.error(p, pt.tensor([self.vocab.numberize(c_actual)], device=self.device))
-                    loss.backward()
-                    self.optimizer.step()
-                    train_chars += len(line)
-                print(f"epoch {epoch} loss: {loss.item() / train_chars}")
-                # save model parameters
-                pt.save(self.state_dict(), f"./lstm_{epoch}.model")
-                # test on dev set
-                dev_data: Sequence[Sequence[str]] = load_chars_from_file("./data/dev")
-                num_correct: int = 0
-                total: int = 0
-                for dev_line in dev_data:
-                    q = self.start()
-                    for c_input, c_actual in zip([START_TOKEN] + dev_line, dev_line + [END_TOKEN]):
-                        q, p = self.step(q, self.vocab.numberize(c_input))
-                        c_predicted = self.vocab.denumberize(p.argmax())
-                        num_correct += int(c_predicted == c_actual)
-                        total += 1
-                print(f"epoch {epoch} dev accuracy: {num_correct / total}")
-        else:
+        if saved_model_path is not None:
             print(f"loading model from {saved_model_path}")
             self.load_state_dict(pt.load(saved_model_path, weights_only=True))
         
 
+        for epoch in range(num_epochs):
+            random.shuffle(data)
+            train_chars = 0
+            for line in tqdm(data, desc=f"epoch {epoch}"):
+                self.optimizer.zero_grad()
+                loss = 0.
+                q = self.start()
+                for c_input, c_actual in zip([START_TOKEN] + line, line + [END_TOKEN]):
+                    q, p = self.step(q, self.vocab.numberize(c_input))
+                    loss += self.error(p, pt.tensor([self.vocab.numberize(c_actual)], device=self.device))
+                loss.backward()
+                self.optimizer.step()
+                train_chars += len(line)
+            print(f"epoch {epoch} loss: {loss.item() / train_chars}")
+            pt.save(self.state_dict(), f"./lstm_{epoch}.model")
+
+
+            # test on dev set
+            dev_data: Sequence[Sequence[str]] = load_chars_from_file("./data/dev")
+            num_correct: int = 0
+            total: int = 0
+            for dev_line in dev_data:
+                q = self.start()
+                for c_input, c_actual in zip([START_TOKEN] + dev_line, dev_line + [END_TOKEN]):
+                    q, p = self.step(q, self.vocab.numberize(c_input))
+                    c_predicted = self.vocab.denumberize(p.argmax())
+                    num_correct += int(c_predicted == c_actual)
+                    total += 1
+            print(f"epoch {epoch} dev accuracy: {num_correct / total}")
+        
+
     def start(self: LSTMType) -> StateType:
-        # Create initial states on the correct device
+
         return pt.zeros(1, 64, device=self.device), pt.zeros(1, 64, device=self.device)
 
     def forward(self: LSTMType, q: StateType, c: int) -> Tuple[StateType, pt.Tensor]:
-        # Create one_hot tensor on the proper device
+
         one_hot = pt.zeros(1, len(self.vocab), device=self.device)
         one_hot[0, c] = 1.
         new_hidden, new_cell = self.lstm(one_hot, q)
