@@ -52,8 +52,8 @@ def train_lstm() -> LSTM:
     train_data: Sequence[Sequence[str]] = load_chars_from_file("./data/large")
 
     saved_model_path = None
-    if os.path.exists("./lstm_1.model"):
-        saved_model_path = "./lstm_1.model"
+    if os.path.exists("./lstm_14.model"):
+        saved_model_path = "./lstm_14.model"
 
     return LSTM(train_data, saved_model_path=saved_model_path, num_epochs=100)
 
@@ -74,11 +74,25 @@ def dev_lstm(m: LSTM) -> Tuple[int, int]:
             total += 1
     return num_correct, total
 
-def main() -> None:
-    m: RNN = train_lstm()
+def test_lstm(m: LSTM) -> Tuple[int, int]:
+    dev_data: Sequence[Sequence[str]] = load_chars_from_file("./data/test")
 
-    # save the model optionally
-    # pt.save(m.state_dict(), "./rnn.model")
+    num_correct: int = 0
+    total: int = 0
+    for dev_line in dev_data:
+        q = m.start()
+
+        for c_input, c_actual in zip([START_TOKEN] + dev_line,
+                                      dev_line + [END_TOKEN]):
+            q, p = m.step(q, m.vocab.numberize(c_input))
+            c_predicted = m.vocab.denumberize(p.argmax())
+
+            num_correct += int(c_predicted == c_actual)
+            total += 1
+    return num_correct, total
+
+def main() -> None:
+    m: LSTM = train_lstm()
 
     num_correct, total = dev_lstm(m)
     print(num_correct / total)
